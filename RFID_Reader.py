@@ -1,8 +1,8 @@
 #DataTransMitter
 # Tool = "RFID Reader"
 # HandcraftedBy : "AIVolved"\
-# Version = "1.0"
-# LastModifiedOn : "9th April 2022"
+# Version = "1.3"
+# LastModifiedOn : "19th April 2022"
 #______________________________________________________________________
 
 import serial
@@ -16,10 +16,18 @@ import time
 import smtplib
 from threading import*
 
-com1 = '/dev/ttyUSB1'  # user should input
-com2 = '/dev/ttyUSB0'  # user should input
+com1 = 'COM3'  # user should input
+com2 = 'COM6'  # user should input
 RecipietnMailID = "test233155ID@gmail.com"
+tag_hex_value_list = []
 
+Database = {
+'EEEE0000E2E2808011117070' : "TestData1",
+'303ACA4780DE93199C82FABD' : "TestData2",
+'000000000000000000000000' : "InvalidData",
+'EEEE000030303A3ACACA4747' : "TestData3",
+'0000000011110000EEEE0000' : "TestData4",
+'303ACA4780DE93199C82FA7A' : "TestData5" }
 
 
 def showUserInfo(message):
@@ -36,33 +44,37 @@ def showUserInfo(message):
 
 
 def convert_tag_from_bytes_to_hex(tag_bytes_list):
+    #print("returning", tag_bytes_list)
     tag_hex_value = ""
-    for index, bytes_value in enumerate(tag_bytes_list):
+    for index in range(len(tag_bytes_list)):
+        #print("inside for",tag_bytes_list[index])
         #   First 3 bytes and last byte are placeholders
         if index > 3 and index < 16:
-            tag_hex_value += "{0:02X}".format(bytes_value)
-
+            tag_hex_value += "{0:02X}".format(tag_bytes_list[index])
+    #print(tag_hex_value)
     return tag_hex_value
-
-
-def run_test():
-    try:
-        serial_device_1 = serial.Serial(
+    
+try:
+    serial_device_1 = serial.Serial(
             com1, 57600, timeout=0.5
         )
-        serial_device_2 = serial.Serial(
+    serial_device_2 = serial.Serial(
             com2, 57600, timeout=0.5
         )
-    except serial.serialutil.SerialException as err:
+except serial.serialutil.SerialException as err:
         try:
             showUserInfo('There was a problem while opening the ports for the reader')  # this will throw error message
         except:
             pass
 
+def run_test():
+    global tag_hex_value_list
+   
+
     tag_bytes_list_for_device_1 = []
     tag_bytes_list_for_device_2 = []
 
-    tag_hex_value_list = []
+    
 
     should_read_tag_from_device_1 = False
     should_read_tag_from_device_2 = False
@@ -72,6 +84,9 @@ def run_test():
         serial_device_1.reset_input_buffer()
         serial_device_2.reset_input_buffer()
         while True:
+            if len(tag_hex_value_list)>=400:
+                tag_hex_value_list.clear()
+            #print("herheree")
             read_bytes_from_device_1 = serial_device_1.read()
             int_value_from_device_1 = int.from_bytes(
                 read_bytes_from_device_1, "big")
@@ -95,7 +110,9 @@ def run_test():
                 if len(tag_bytes_list_for_device_1) == 18:
                     should_read_tag_from_device_1 = False
                     tag_hex_value = convert_tag_from_bytes_to_hex(tag_bytes_list_for_device_1)
+               
                     if tag_hex_value not in tag_hex_value_list:
+                        
                         tag_hex_value_list.append(tag_hex_value)
                         print(f"Tag list device 1: {tag_hex_value_list}")  # this has to be displayed
                     tag_bytes_list_for_device_1.clear()
@@ -137,7 +154,7 @@ if __name__ == "__main__":
     MainWindowGUI.setWindowFlag(QtCore.Qt.WindowCloseButtonHint, False)
 
     LogTable = QTableWidget(MainWindowGUI)
-    LogTable.setRowCount(20)
+    LogTable.setRowCount(505)
     LogTable.setColumnCount(2)
     LogTable.move(45, 60)
     LogTable.setFixedSize(500, 300)
@@ -183,6 +200,7 @@ if __name__ == "__main__":
             pass
 
     def SystemExit():
+        
         serial_device_1.flush()
         serial_device_1.reset_input_buffer()
         serial_device_1.close()
@@ -190,22 +208,27 @@ if __name__ == "__main__":
         serial_device_2.flush()
         serial_device_2.reset_input_buffer()
         serial_device_2.close()
-        sys.exit(0)
+        
+        #sys.exit(0)
+        
         MainWindowGUI.close()
     def ScanRFID():
         pass
     def UpdateDispalyTable():
-        try:
-            global LogTable
-            for rfidData in range(0,100):
-                LogTable.setItem(1, 0, QTableWidgetItem(str(rfidData)))
-                LogTable.setItem(1, 1, QTableWidgetItem(str(rfidData)))
-                LogTable.update()
-        except Exception as error :
-            print(error)
+        while True:
+            if len(tag_hex_value_list) > 0 :
+                try:
+                    global LogTable
+                    for rfidDataPosition in range(len(tag_hex_value_list)):
+                        LogTable.setItem(rfidDataPosition,0 , QTableWidgetItem(str(tag_hex_value_list[rfidDataPosition])))
+                        LogTable.setItem(rfidDataPosition,1, QTableWidgetItem(str(Database[str(tag_hex_value_list[rfidDataPosition])])))
+                        LogTable.update()
+                except Exception as error :
+                    print(error)
 
 
-    Task1 = Thread(target=UpdateDispalyTable)
+    Task1 = Thread(target=run_test)
+    Task2 = Thread(target=UpdateDispalyTable)
 
     def ReadRFID():
         try:
@@ -213,9 +236,15 @@ if __name__ == "__main__":
                 Task1.start()
             else:
                 showUserInfo("RFID read already initiated")
+
+            if not Task2.is_alive():
+                Task2.start()
+            else:
+                pass
+
         except Exception as error:
-            showUserInfo(error)
-        #run_test()
+            print(error)
+        
 
 
     ButtonScan = QPushButton("Scan" , MainWindowGUI)
